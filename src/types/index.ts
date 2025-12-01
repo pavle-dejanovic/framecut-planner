@@ -17,3 +17,4 @@ export interface CutResult {
 }
 
 export type OptimizationAlgorithm = "FFD" | "BFD";
+

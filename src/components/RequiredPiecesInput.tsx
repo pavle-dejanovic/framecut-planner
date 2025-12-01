@@ -1,9 +1,8 @@
-import { useState } from "react";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
+import { useState, useEffect } from "react";
 import { Label } from "./ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Plus, Trash2 } from "lucide-react";
+import { AddPieceForm } from "./AddPieceForm";
+import { PieceItem } from "./PieceItem";
 import type { RequiredPiece } from "../types";
 
 interface RequiredPiecesInputProps {
@@ -15,128 +14,162 @@ export function RequiredPiecesInput({
   pieces,
   onChange,
 }: RequiredPiecesInputProps) {
-  const [newLength, setNewLength] = useState("");
-  const [newQuantity, setNewQuantity] = useState("1");
+  // Local state for editing pieces - allows free editing
+  const [editingPieces, setEditingPieces] = useState<{
+    [key: number]: { length: string; quantity: string };
+  }>({});
 
-  const handleAdd = () => {
-    const length = parseFloat(newLength);
-    const quantity = parseInt(newQuantity, 10);
-
-    if (isNaN(length) || length <= 0 || isNaN(quantity) || quantity <= 0) {
-      return;
+  // Initialize editing state when pieces change
+  useEffect(() => {
+    const newEditing: { [key: number]: { length: string; quantity: string } } =
+      {};
+    pieces.forEach((piece, index) => {
+      // Preserve existing editing values if they exist, otherwise initialize from piece
+      if (editingPieces[index]) {
+        newEditing[index] = editingPieces[index];
+      } else {
+        newEditing[index] = {
+          length: piece.length.toString(),
+          quantity: piece.quantity.toString(),
+        };
+      }
+    });
+    // Only update if structure changed (pieces added/removed)
+    if (Object.keys(newEditing).length !== Object.keys(editingPieces).length) {
+      setEditingPieces(newEditing);
     }
+  }, [pieces.length]);
 
-    onChange([...pieces, { length, quantity }]);
-    setNewLength("");
-    setNewQuantity("1");
+  const handleAdd = (length: number, quantity: number) => {
+    const newPieces = [...pieces, { length, quantity }];
+    onChange(newPieces);
+
+    // Initialize editing state for the new piece
+    const newIndex = newPieces.length - 1;
+    setEditingPieces((prev) => ({
+      ...prev,
+      [newIndex]: {
+        length: length.toString(),
+        quantity: quantity.toString(),
+      },
+    }));
   };
 
   const handleRemove = (index: number) => {
-    onChange(pieces.filter((_, i) => i !== index));
+    const updated = pieces.filter((_, i) => i !== index);
+    onChange(updated);
+
+    // Clean up editing state
+    const newEditing: { [key: number]: { length: string; quantity: string } } =
+      {};
+    updated.forEach((piece, i) => {
+      if (editingPieces[i]) {
+        newEditing[i] = editingPieces[i];
+      } else {
+        newEditing[i] = {
+          length: piece.length.toString(),
+          quantity: piece.quantity.toString(),
+        };
+      }
+    });
+    setEditingPieces(newEditing);
   };
 
-  const handleUpdate = (
+  const handleInputChange = (
     index: number,
     field: "length" | "quantity",
     value: string
   ) => {
-    const updated = [...pieces];
-    const numValue = parseFloat(value);
+    // Allow any input during editing
+    setEditingPieces((prev) => ({
+      ...prev,
+      [index]: {
+        ...prev[index],
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleInputBlur = (index: number, field: "length" | "quantity") => {
+    const editingValue = editingPieces[index]?.[field] || "";
+    const numValue =
+      field === "length"
+        ? parseFloat(editingValue)
+        : parseInt(editingValue, 10);
+    const currentValue = pieces[index][field];
+
+    // Validate and update if valid, otherwise revert to current value
     if (!isNaN(numValue) && numValue > 0) {
+      const updated = [...pieces];
       updated[index] = { ...updated[index], [field]: numValue };
       onChange(updated);
+
+      // Update editing state with validated value
+      setEditingPieces((prev) => ({
+        ...prev,
+        [index]: {
+          ...prev[index],
+          [field]: numValue.toString(),
+        },
+      }));
+    } else {
+      // Revert to current value
+      setEditingPieces((prev) => ({
+        ...prev,
+        [index]: {
+          ...prev[index],
+          [field]: currentValue.toString(),
+        },
+      }));
+    }
+  };
+
+  const ensureEditingState = (index: number) => {
+    if (!editingPieces[index]) {
+      setEditingPieces((prev) => ({
+        ...prev,
+        [index]: {
+          length: pieces[index].length.toString(),
+          quantity: pieces[index].quantity.toString(),
+        },
+      }));
     }
   };
 
   return (
-    <Card className="shadow-lg border-2">
-      <CardHeader className="border-b bg-linear-to-r from-emerald-50 to-teal-50 p-4 sm:p-6">
+    <Card className="shadow-lg border-2 flex flex-col min-h-0">
+      <CardHeader className="border-b bg-linear-to-r from-emerald-50 to-teal-50 p-4 sm:p-6 shrink-0">
         <CardTitle className="text-lg sm:text-xl">Required Pieces</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2">
-          <div className="flex-1">
-            <Label htmlFor="length">Length</Label>
-            <Input
-              id="length"
-              type="number"
-              step="0.01"
-              min="0.01"
-              placeholder="e.g., 120.5"
-              value={newLength}
-              onChange={(e) => setNewLength(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            />
-          </div>
-          <div className="flex-1">
-            <Label htmlFor="quantity">Quantity</Label>
-            <Input
-              id="quantity"
-              type="number"
-              step="1"
-              min="1"
-              placeholder="e.g., 5"
-              value={newQuantity}
-              onChange={(e) => setNewQuantity(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-            />
-          </div>
-          <div className="flex items-end">
-            <Button
-              onClick={handleAdd}
-              className="gap-2 w-full sm:w-auto min-h-[44px]"
-            >
-              <Plus className="h-4 w-4" />
-              Add
-            </Button>
-          </div>
-        </div>
+      <CardContent className="flex flex-col p-4 sm:p-6 gap-3 sm:gap-4 min-h-0 flex-1">
+        <AddPieceForm onAdd={handleAdd} />
 
         {pieces.length > 0 && (
-          <div className="space-y-2">
-            <Label>Added Pieces</Label>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
+          <div className="flex flex-col space-y-2 flex-1 min-h-0">
+            <div className="flex items-center justify-between shrink-0">
+              <Label className="text-sm font-semibold">Added Pieces</Label>
+              <span className="text-xs text-muted-foreground italic">
+                Click any field to edit
+              </span>
+            </div>
+            <div className="space-y-2 overflow-y-auto flex-1 min-h-0">
               {pieces.map((piece, index) => (
-                <div
+                <PieceItem
                   key={index}
-                  className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 border-2 rounded-lg bg-white hover:border-primary/50 transition-colors"
-                >
-                  <div className="flex-1">
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={piece.length}
-                      onChange={(e) =>
-                        handleUpdate(index, "length", e.target.value)
-                      }
-                      className="min-h-[44px]"
-                    />
-                  </div>
-                  <span className="text-sm self-center hidden sm:inline">
-                    ×
-                  </span>
-                  <div className="flex-1">
-                    <Input
-                      type="number"
-                      step="1"
-                      min="1"
-                      value={piece.quantity}
-                      onChange={(e) =>
-                        handleUpdate(index, "quantity", e.target.value)
-                      }
-                      className="min-h-[44px]"
-                    />
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleRemove(index)}
-                    className="min-h-[44px] min-w-[44px]"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+                  piece={piece}
+                  index={index}
+                  editingValue={editingPieces[index]}
+                  onLengthChange={(value) =>
+                    handleInputChange(index, "length", value)
+                  }
+                  onQuantityChange={(value) =>
+                    handleInputChange(index, "quantity", value)
+                  }
+                  onLengthBlur={() => handleInputBlur(index, "length")}
+                  onQuantityBlur={() => handleInputBlur(index, "quantity")}
+                  onFocus={() => ensureEditingState(index)}
+                  onRemove={() => handleRemove(index)}
+                />
               ))}
             </div>
           </div>
